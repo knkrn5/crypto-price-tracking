@@ -23,6 +23,23 @@ import type { AlertSocketPayload } from './store/alertsSlice'
 
 const defaultCoins = ['bitcoin', 'ethereum', 'solana']
 
+const resolveSocketUrl = () => {
+  const socketOverride = import.meta.env.VITE_SOCKET_URL
+  if (socketOverride && socketOverride.trim().length) {
+    return socketOverride
+  }
+  const apiUrl = import.meta.env.VITE_API_URL
+  if (apiUrl && apiUrl.trim().length) {
+    try {
+      const parsed = new URL(apiUrl)
+      return `${parsed.protocol}//${parsed.host}`
+    } catch (error) {
+      console.warn('Failed to derive socket URL from VITE_API_URL', error)
+    }
+  }
+  return undefined
+}
+
 const getUserId = () => {
   if (typeof window === 'undefined') {
     return 'server'
@@ -54,7 +71,12 @@ function App() {
 
   useEffect(() => {
     setSocketState('connecting')
-    let socket: Socket | null = io({ transports: ['websocket'], autoConnect: true })
+    const socketUrl = resolveSocketUrl()
+    const socketOptions = {
+      transports: ['websocket'] as const,
+      autoConnect: true,
+    }
+    let socket: Socket | null = socketUrl ? io(socketUrl, socketOptions) : io(socketOptions)
 
     socket.on('connect', () => {
       setSocketState('connected')
