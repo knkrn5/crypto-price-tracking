@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { io, type Socket } from 'socket.io-client'
+import { io, type Socket, type ManagerOptions, type SocketOptions } from 'socket.io-client'
 import { PriceTable } from './components/PriceTable'
 import { AlertForm } from './components/AlertForm'
 import { AlertsTable } from './components/AlertsTable'
@@ -72,8 +72,8 @@ function App() {
   useEffect(() => {
     setSocketState('connecting')
     const socketUrl = resolveSocketUrl()
-    const socketOptions = {
-      transports: ['websocket'] as const,
+    const socketOptions: Partial<ManagerOptions & SocketOptions> = {
+      transports: ['websocket'],
       autoConnect: true,
     }
     let socket: Socket | null = socketUrl ? io(socketUrl, socketOptions) : io(socketOptions)
