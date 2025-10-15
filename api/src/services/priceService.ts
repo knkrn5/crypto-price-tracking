@@ -17,6 +17,8 @@ export interface PriceSnapshot {
 
 const PRICE_CACHE_KEY = 'prices:latest'
 const PRICE_CACHE_TTL_SECONDS = 50
+const COINGECKO_PUBLIC_ENDPOINT = 'https://api.coingecko.com/api/v3/simple/price'
+const COINGECKO_PRO_ENDPOINT = 'https://pro-api.coingecko.com/api/v3/simple/price'
 
 const buildHeaders = () => {
   if (!env.COINGECKO_API_KEY) {
@@ -27,23 +29,41 @@ const buildHeaders = () => {
   }
 }
 
-export const fetchAndCachePrices = async (): Promise<PriceSnapshot> => {
-  const ids = env.COIN_IDS.join(',')
+const resolveEndpoint = () => {
+  if (env.COINGECKO_API_KEY) {
+    return COINGECKO_PRO_ENDPOINT
+  }
+  return COINGECKO_PUBLIC_ENDPOINT
+}
 
+const requestPrices = (url: string, headers?: Record<string, string>) => {
+  return axios.get<Record<string, { usd: number; usd_24h_change?: number }>>(url, {
+    params: {
+      ids: env.COIN_IDS.join(','),
+      vs_currencies: 'usd',
+      include_24hr_change: true,
+      precision: 4,
+    },
+    ...(headers ? { headers } : {}),
+  })
+}
+
+export const fetchAndCachePrices = async (): Promise<PriceSnapshot> => {
   try {
     const headers = buildHeaders()
-    const response = await axios.get<Record<string, { usd: number; usd_24h_change?: number }>>(
-      'https://api.coingecko.com/api/v3/simple/price',
-      {
-        params: {
-          ids,
-          vs_currencies: 'usd',
-          include_24hr_change: true,
-          precision: 4,
-        },
-        ...(headers ? { headers } : {}),
+    let response
+    try {
+      response = await requestPrices(resolveEndpoint(), headers)
+    } catch (error) {
+      if (headers && axios.isAxiosError(error) && error.response && [400, 401, 403, 429].includes(error.response.status)) {
+        logger.warn('CoinGecko pro request failed, retrying without API key', {
+          status: error.response.status,
+        })
+        response = await requestPrices(COINGECKO_PUBLIC_ENDPOINT)
+      } else {
+        throw error
       }
-    )
+    }
 
     const timestamp = new Date().toISOString()
     const data = response.data as Record<string, { usd: number; usd_24h_change?: number }>
